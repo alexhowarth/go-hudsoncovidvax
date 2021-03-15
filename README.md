@@ -10,4 +10,6 @@ go get github.com/alexhowarth/go-hudsoncovidvax
 
 ```bash
 go run main.go --email <emailaddress> --pass <password>
+No appointments
+exit status 1
 ```
