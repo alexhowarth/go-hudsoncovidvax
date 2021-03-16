@@ -20,7 +20,7 @@ var appointmentsPrefix = "https://hudsoncovidvax.org/second/appt"
 // text present when no appointments are available
 var noAptsRegex = regexp.MustCompile(`NOT ABLE TO SCHEDULE`)
 
-var userAgent = `user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36`
+var userAgent = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36`
 
 func main() {
 
@@ -33,9 +33,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	c := colly.NewCollector(colly.UserAgent(userAgent))
+	tokenCollector := colly.NewCollector(colly.UserAgent(userAgent))
 
-	c.OnHTML("html", func(e *colly.HTMLElement) {
+	tokenCollector.OnHTML("html", func(e *colly.HTMLElement) {
 		// grab the CSRF token
 		csrfToken := strings.Split(e.ChildAttr("meta[name=\"csrf-token\"]", "content"), "\n")[0]
 
@@ -43,22 +43,22 @@ func main() {
 			log.Fatal("Unable to scrape CSRF token")
 		}
 
-		d := c.Clone()
+		loginCollector := tokenCollector.Clone()
 
 		// use CSRF token scraped from the previous request to login
-		err := d.Post(loginPage, map[string]string{"_token": csrfToken, "email": *email, "password": *password})
+		err := loginCollector.Post(loginPage, map[string]string{"_token": csrfToken, "email": *email, "password": *password})
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		// find link to appointments
-		d.OnHTML("a", func(e *colly.HTMLElement) {
+		loginCollector.OnHTML("a", func(e *colly.HTMLElement) {
 			link := e.Attr("href")
 			if strings.HasPrefix(link, appointmentsPrefix) {
 
-				e := d.Clone()
+				appointmentCollector := loginCollector.Clone()
 
-				e.OnHTML("body", func(e *colly.HTMLElement) {
+				appointmentCollector.OnHTML("body", func(e *colly.HTMLElement) {
 					if noAptsRegex.MatchString(e.Text) {
 						fmt.Println("No appointments")
 						os.Exit(1)
@@ -68,16 +68,16 @@ func main() {
 					}
 				})
 
-				// visit appointments link
-				e.Visit(link)
+				// 3) visit appointments link
+				appointmentCollector.Visit(link)
 			}
 		})
 
-		// visit dashboard
-		d.Visit(dashboardPage)
+		// 2) visit dashboard
+		loginCollector.Visit(dashboardPage)
 
 	})
 
-	// visit login page
-	c.Visit(loginPage)
+	// 1) visit login page
+	tokenCollector.Visit(loginPage)
 }
